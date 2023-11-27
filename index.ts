@@ -81,12 +81,15 @@ class Board {
         const same = pixel.getNeighbors(NeighborType.same).filter((e) => e);
         const diff = pixel.getNeighbors(NeighborType.differentColor).filter((e) => e);
         let mixed = false;
+        // one yellow, same and diff
         if (diff.filter((e) => e?.color !== Color.colored).length !== 0) {
+          // diff.filter.length will be 1
           if (diff.length !== 2 && same.filter((e) => e?.color !== Color.colored).length == 0) continue;
           mixed = true;
         } else if (same.length !== 2) continue;
         const n1 = (mixed ? diff : same)[0] as Pixel;
         const n2 = (mixed ? diff : same)[1] as Pixel;
+        if (!n1 || !n2) continue;
         checked.push(n1);
         checked.push(n2);
         if (
@@ -181,7 +184,7 @@ class Board {
         } else if (otherPixels[0].color == Color.colored) {
           // 1 is a real color
           const otherColor = otherPixels[1].color;
-          let colors;
+          let colors = [otherColor, otherColor];
           if (this.getRemaining(otherColor, coloredCount) < 2) {
             // we have to resort to mixed mosaic
             colors = this.getOtherColors(otherColor);
@@ -198,7 +201,7 @@ class Board {
         } else if (otherPixels[1].color == Color.colored) {
           // 0 is a real color
           const otherColor = otherPixels[0].color;
-          let colors;
+          let colors = [otherColor, otherColor];
           if (this.getRemaining(otherColor, coloredCount) < 2) {
             // we have to resort to mixed mosaic
             colors = this.getOtherColors(otherColor);
@@ -235,6 +238,83 @@ class Board {
     }
     return newColors;
   };
+
+  public hash(): string {
+    // Preallocate the key for better performance
+    const keyArray: number[] = new Array(this.pixels.length * this.pixels[0].length);
+
+    let index = 0;
+    for (let i = 0; i < this.pixels.length; i++) {
+      for (let j = 0; j < this.pixels[i].length; j++) {
+        keyArray[index] = this.pixels[i][j].color;
+        index++;
+      }
+    }
+
+    return keyArray.join("");
+  }
+
+  public getScore() {
+    let score = 0;
+    for (let i = 0; i < this.pixels.length; i++) {
+      for (let j = 0; j < this.pixels[i].length; j++) {
+        const p = this.pixels[i][j];
+        if (p.color !== Color.empty) score += 3;
+      }
+    }
+    const mosaics = this.findMosaics();
+    score += mosaics.length * 10;
+    return score;
+  }
+
+  public copy() {
+    const copy = new Board();
+    copy.pixels = this.pixels.map((row) => row.map((p) => new Pixel(copy, p.y, p.x, p.color)));
+    return copy;
+  }
+
+  public getMoves() {
+    // go from top to bottom for each column
+    const moves: Pixel[] = [];
+    // }
+    for (let i = this.pixels.length - 1; i >= 0; i--) {
+      for (let j = 0; j < this.pixels[i].length; j++) {
+        const pixel = this.pixels[i][j];
+        // if (pixel.color == Color.empty) continue;
+        if (pixel.color !== Color.empty) continue; // skip if not empty
+        {
+          // check if pixels covering it
+          const tL = pixel.getNeighbor(Direction.topLeft);
+          if (tL && tL.color !== Color.empty) {
+            // console.log("tL", { x: tL.x, y: tL.y, color: Color[tL.color] }, { x: pixel.x, y: pixel.y, color: Color[pixel.color] });
+            continue;
+          }
+          const tR = pixel.getNeighbor(Direction.topRight);
+          if (tR && tR.color !== Color.empty) {
+            // console.log("tR", { x: tR.x, y: tR.y, color: Color[tR.color] }, { x: pixel.x, y: pixel.y, color: Color[pixel.color] });
+            continue;
+          }
+        }
+        {
+          // check if the pixel has proper supports
+          const bL = pixel.getNeighbor(Direction.bottomLeft);
+          const bR = pixel.getNeighbor(Direction.bottomRight);
+          if (bL && bL.color === Color.empty) {
+            // missing left support
+            continue;
+          }
+          if (bR && bR.color === Color.empty) {
+            // missing right support
+            continue;
+          }
+          if (!bL && bR?.color === Color.empty) continue; // against left wall, missing right pixel
+          if (!bR && bL?.color === Color.empty) continue; // against right wall, missing left pixel
+        }
+        moves.push(pixel);
+      }
+    }
+    return moves;
+  }
 }
 
 enum ColorEscape {
@@ -303,15 +383,16 @@ class Pixel {
     }
   }
 
-  getNeightbor(direction: Direction): Pixel | null {
+  getNeighbor(direction: Direction): Pixel | null {
     const offset = this.offsets[direction];
-    return this.board.pixels[this.x + offset[0]]?.[this.y + offset[1]];
+    // console.log(offset);
+    return this.board.pixels[this.y + offset[0]]?.[this.x + offset[1]];
   }
 
   getNeighbors(type: NeighborType = NeighborType.all): (Pixel | null)[] {
     if (type == NeighborType.none) return [null, null, null, null, null, null];
     const neighbors = this.offsets.map((offset, i) => {
-      const pixel = this.board.pixels[this.y + offset[0]]?.[this.x + offset[1]];
+      let pixel = this.board.pixels[this.y + offset[0]] ? this.board.pixels[this.y + offset[0]][this.x + offset[1]] : null;
       if (!pixel || pixel.color === Color.empty) return null;
       if (type == NeighborType.all) {
         return pixel;
@@ -340,22 +421,76 @@ class Pixel {
 }
 
 const board = new Board();
-board.loadString("ywyywyyywywyywwwwwwyc/c");
+board.loadString("y");
 board.printBoard();
-const mosaics = board.findMosaics();
+console.log();
+
+interface Branch {
+  score: number;
+  history: PixelData[];
+}
+
+const getHighestScore = (board: Board, depth: number, history: PixelData[], transpositionTable: Map<string, Branch>): Branch => {
+  const boardKey = board.hash();
+
+  if (transpositionTable.has(boardKey)) {
+    return transpositionTable.get(boardKey) as Branch;
+  }
+
+  if (depth == 0) {
+    return { score: board.getScore(), history };
+  }
+  const moves = board.getMoves().map((e) => ({ x: e.x, y: e.y, color: Color[e.color] }));
+  let maxScore: Branch = { score: -Infinity, history: [] };
+  moves.forEach((move) => {
+    for (let color of [Color.white, Color.colored]) {
+      board.pixels[move.y][move.x].color = color;
+      const score = getHighestScore(board, depth - 1, [...history, { x: move.x, y: move.y, color: color }], transpositionTable);
+      board.pixels[move.y][move.x].color = Color.empty;
+      if (score.score > maxScore.score) {
+        maxScore = score;
+      }
+    }
+  });
+  transpositionTable.set(boardKey, maxScore);
+  return maxScore;
+};
+
+const start = Date.now();
+const topScore = getHighestScore(board, 6, [], new Map());
+const end = Date.now();
+console.log("Top", topScore.score);
+console.log("Time:", end - start);
+
+const newBoard = board.copy();
+topScore.history.forEach((e) => {
+  newBoard.pixels[e.y][e.x].color = e.color;
+});
+const mosaics = newBoard.findMosaics();
 mosaics.forEach((mosaic) => {
   console.log(mosaic.map((e) => ColorEscape[Color[e.color]] + `(${e.y}, ${e.x})` + ColorEscape.reset).join(" "));
 });
-const newColors = board.coloredColor(mosaics);
+const newColors = newBoard.coloredColor(mosaics);
 newColors.forEach((e) => {
   console.log(`(${e.y}, ${e.x}) = ${Color[e.color]}`);
-  board.pixels[e.y][e.x].color = e.color;
+  newBoard.pixels[e.y][e.x].color = e.color;
 });
-board.printBoard();
-// while (true) {
-//   board.printBoard();
-//   const y = prompt("y:") as string;
-//   const x = prompt("x:") as string;
-//   const color = prompt("color:") as string;
-//   board.pixels[parseInt(y)][parseInt(x)].color = Color[color];
-// }
+newBoard.printBoard();
+
+// const mosaics = board.findMosaics();
+// mosaics.forEach((mosaic) => {
+//   console.log(mosaic.map((e) => ColorEscape[Color[e.color]] + `(${e.y}, ${e.x})` + ColorEscape.reset).join(" "));
+// });
+// const newColors = board.coloredColor(mosaics);
+// newColors.forEach((e) => {
+//   console.log(`(${e.y}, ${e.x}) = ${Color[e.color]}`);
+//   board.pixels[e.y][e.x].color = e.color;
+// });
+// board.printBoard();
+// // while (true) {
+// //   board.printBoard();
+// //   const y = prompt("y:") as string;
+// //   const x = prompt("x:") as string;
+// //   const color = prompt("color:") as string;
+// //   board.pixels[parseInt(y)][parseInt(x)].color = Color[color];
+// // }
