@@ -76,7 +76,7 @@ class Board {
     for (let y = 0; y < this.pixels.length; y++) {
       for (let x = 0; x < this.pixels[y].length; x++) {
         const pixel = this.pixels[y][x];
-        if (pixel.color === Color.empty || checked.includes(pixel)) continue;
+        if (pixel.color === Color.empty || pixel.color === Color.white || checked.includes(pixel)) continue;
         checked.push(pixel);
         const same = pixel.getNeighbors(NeighborType.same).filter((e) => e);
         const diff = pixel.getNeighbors(NeighborType.differentColor).filter((e) => e);
@@ -113,27 +113,66 @@ class Board {
     return mosaics;
   };
 
+  public getColorCount = (): number[] => {
+    const count: number[] = [];
+    for (let i = Color.white; i < Color.colored; i++) {
+      count[i] = 0;
+    }
+    for (const row of this.pixels) {
+      for (const pixel of row) {
+        if (pixel.color == Color.colored) continue;
+        count[pixel.color]++;
+      }
+    }
+    return count;
+  };
+
+  public getRemaining = (color: Color, coloredCount: number[]) => {
+    return this.limits[color] - coloredCount[color];
+  };
+
+  public getOtherColors = (color: Color): Color[] => {
+    const colors: Color[] = [];
+    switch (color) {
+      case Color.yellow:
+        colors.push(Color.green);
+        colors.push(Color.purple);
+        break;
+      case Color.green:
+        colors.push(Color.yellow);
+        colors.push(Color.purple);
+        break;
+      case Color.purple:
+        colors.push(Color.yellow);
+        colors.push(Color.green);
+        break;
+    }
+    return colors;
+  };
+
   public coloredColor = (mosaics: Pixel[][]): PixelData[] => {
     // return the colors that the color.colored should change to
     const newColors: PixelData[] = [];
     const checked: Pixel[] = [];
+    const coloredCount = this.getColorCount();
     for (const mosaic of mosaics) {
       for (const pixel of mosaic) {
-        if (pixel.color != Color.colored) continue;
+        if (pixel.color !== Color.colored) continue;
         if (checked.includes(pixel)) continue;
         checked.push(pixel);
         const touching = pixel.getTouchingColors();
         const otherPixels = mosaic.filter((e) => e != pixel);
+        let mostColor = Color.white;
+        let mostCount = 0;
+        for (let i = Color.yellow; i <= Color.green; i++) {
+          if (this.getRemaining(i, coloredCount) > mostCount) {
+            mostColor = i;
+            mostCount = this.limits[i];
+          }
+        }
+        console.log(mostColor);
         if (otherPixels[0].color == Color.colored && otherPixels[1].color == Color.colored) {
           // all colored
-          let mostColor = Color.white;
-          let mostCount = 0;
-          for (let i = Color.yellow; i <= Color.green; i++) {
-            if (this.limits[i] > mostCount) {
-              mostColor = i;
-              mostCount = this.limits[i];
-            }
-          }
           checked.push(otherPixels[0]);
           checked.push(otherPixels[1]);
           newColors.push({ x: pixel.x, y: pixel.y, color: mostColor });
@@ -142,17 +181,37 @@ class Board {
         } else if (otherPixels[0].color == Color.colored) {
           // 1 is a real color
           const otherColor = otherPixels[1].color;
+          let colors;
+          if (this.getRemaining(otherColor, coloredCount) < 2) {
+            // we have to resort to mixed mosaic
+            colors = this.getOtherColors(otherColor);
+            if (this.getRemaining(colors[0], coloredCount) < 1 || this.getRemaining(colors[0], coloredCount)) {
+              // we don't have enough for a mixed mosaic,
+              // abort to whites
+              colors = [Color.white, Color.white];
+            }
+          }
           checked.push(otherPixels[0]);
           checked.push(otherPixels[1]);
-          newColors.push({ x: pixel.x, y: pixel.y, color: otherColor });
-          newColors.push({ x: otherPixels[0].x, y: otherPixels[0].y, color: otherColor });
+          newColors.push({ x: pixel.x, y: pixel.y, color: colors[0] });
+          newColors.push({ x: otherPixels[0].x, y: otherPixels[0].y, color: colors[1] });
         } else if (otherPixels[1].color == Color.colored) {
           // 0 is a real color
           const otherColor = otherPixels[0].color;
+          let colors;
+          if (this.getRemaining(otherColor, coloredCount) < 2) {
+            // we have to resort to mixed mosaic
+            colors = this.getOtherColors(otherColor);
+            if (this.getRemaining(colors[0], coloredCount) < 1 || this.getRemaining(colors[1], coloredCount) < 1) {
+              // we don't have enough for a mixed mosaic,
+              // abort to whites
+              colors = [Color.white, Color.white];
+            }
+          }
           checked.push(otherPixels[0]);
           checked.push(otherPixels[1]);
-          newColors.push({ x: pixel.x, y: pixel.y, color: otherColor });
-          newColors.push({ x: otherPixels[1].x, y: otherPixels[1].y, color: otherColor });
+          newColors.push({ x: pixel.x, y: pixel.y, color: colors[0] });
+          newColors.push({ x: otherPixels[1].x, y: otherPixels[1].y, color: colors[1] });
         } else {
           // both are real colors
           const c1 = otherPixels[0].color;
@@ -254,8 +313,10 @@ class Pixel {
     const neighbors = this.offsets.map((offset, i) => {
       const pixel = this.board.pixels[this.y + offset[0]]?.[this.x + offset[1]];
       if (!pixel || pixel.color === Color.empty) return null;
-      if (type == NeighborType.all || this.color == Color.colored) {
+      if (type == NeighborType.all) {
         return pixel;
+      } else if (this.color == Color.colored) {
+        return pixel?.color !== Color.white ? pixel : null;
       } else if (type == NeighborType.same) {
         return pixel?.color == this.color || pixel.color == Color.colored ? pixel : null;
       } else if (type == NeighborType.different) {
@@ -279,7 +340,7 @@ class Pixel {
 }
 
 const board = new Board();
-board.loadString("yg/ c");
+board.loadString("ywyywyyywywyywwwwwwyc/c");
 board.printBoard();
 const mosaics = board.findMosaics();
 mosaics.forEach((mosaic) => {
