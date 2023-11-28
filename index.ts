@@ -502,7 +502,7 @@ const getHighestScore = (board: Board, depth: number, history: PixelData[], tran
 };
 
 const board = new Board();
-board.loadString("");
+board.loadString("  gy");
 board.printBoard();
 console.log();
 
