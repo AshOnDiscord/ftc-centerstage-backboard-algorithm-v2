@@ -78,39 +78,77 @@ class Board {
         const pixel = this.pixels[y][x];
         if (pixel.color === Color.empty || pixel.color === Color.white || checked.includes(pixel)) continue;
         checked.push(pixel);
-        const same = pixel.getNeighbors(NeighborType.same).filter((e) => e);
-        const diff = pixel.getNeighbors(NeighborType.differentColor).filter((e) => e);
-        let mixed = false;
-        // one yellow, same and diff
-        if (diff.filter((e) => e?.color !== Color.colored).length !== 0) {
-          // diff.filter.length will be 1
-          if (diff.length !== 2 && same.filter((e) => e?.color !== Color.colored).length == 0) continue;
-          mixed = true;
-        } else if (same.length !== 2) continue;
-        const n1 = (mixed ? diff : same)[0] as Pixel;
-        const n2 = (mixed ? diff : same)[1] as Pixel;
-        if (!n1 || !n2) continue;
-        checked.push(n1);
-        checked.push(n2);
-        if (
-          n1
-            .getNeighbors(n1.color === Color.colored ? NeighborType.none : mixed ? NeighborType.same : NeighborType.differentColor)
-            .filter((e) => e && e.color !== Color.colored).length !== 0
-        ) {
+        const coloredNeighbors = pixel.getNeighbors(NeighborType.colored).filter((e) => e) as Pixel[];
+        coloredNeighbors.forEach((e) => checked.push(e));
+        if (coloredNeighbors.length !== 2) {
+          // we have too little or too many colored neighbors, skip
+          // by extension, the neighbors are also invalid so we can skip them
+          // coloredNeighbors.forEach((e) => checked.push(e));
           continue;
         }
-        if (
-          n2
-            .getNeighbors(n2.color === Color.colored ? NeighborType.none : mixed ? NeighborType.same : NeighborType.differentColor)
-            .filter((e) => e && e.color !== Color.colored).length !== 0
-        )
+        // check our neighbors, do they also have only two colored neighbors?
+        const n1 = coloredNeighbors[0].getNeighbors(NeighborType.colored).filter((e) => e) as Pixel[];
+        const n2 = coloredNeighbors[1].getNeighbors(NeighborType.colored).filter((e) => e) as Pixel[];
+        if (n1.length !== 2 || n2.length !== 2) {
+          // we have too little or too many colored neighbors, skip
+          // by extension, the neighbors are also invalid so we can skip them
+          // coloredNeighbors.forEach((e) => checked.push(e));
+          n1.forEach((e) => checked.push(e));
+          n2.forEach((e) => checked.push(e));
           continue;
-        const n1Same = n1.getNeighbors(mixed ? NeighborType.different : NeighborType.same);
-        const n2Same = n2.getNeighbors(mixed ? NeighborType.different : NeighborType.same);
-        if (n1Same.filter((e) => e).length !== 2) continue;
-        if (n2Same.filter((e) => e).length !== 2) continue;
-        if (!n1Same.find((e) => e == n2)) continue;
-        mosaics.push([pixel, n1, n2]);
+        }
+
+        // make sure the neighbors are the same(so n1 is current and neighbor2, n2 is current and neighbor1)
+        if (!n1.includes(coloredNeighbors[1]) || !n2.includes(coloredNeighbors[0])) {
+          // they are not the same
+          // coloredNeighbors.forEach((e) => checked.push(e));
+          n1.forEach((e) => checked.push(e));
+          n2.forEach((e) => checked.push(e));
+          continue;
+        }
+
+        // we have two colored neighbors, just have to make sure its valid configuration
+        // first we check for all same color
+        const sameColor = coloredNeighbors.filter((e) => e.color === pixel.color || e.color === Color.colored);
+        if (sameColor.length !== 2) {
+          // if we don't have two of the same we have to check for multi/mixed mosaic
+          const color1 = coloredNeighbors[0].color;
+          const color2 = coloredNeighbors[1].color;
+          const mixedColors = this.getOtherColors(pixel.color);
+          // if we are colored, then if one our neighbors is colored, then we have a same or mixed mosaic(to be determined later)
+          if (pixel.color === Color.colored && (color1 === Color.colored || color2 === Color.colored)) {
+            mosaics.push([pixel, ...coloredNeighbors]);
+            continue;
+          }
+
+          // try color1 = colored
+          if (color1 === Color.colored && mixedColors.includes(color2)) {
+            // we have a mixed mosaic
+            mosaics.push([pixel, ...coloredNeighbors]);
+            continue;
+          }
+          // try color2 = colored
+          if (color2 === Color.colored && mixedColors.includes(color1)) {
+            // we have a mixed mosaic
+            mosaics.push([pixel, ...coloredNeighbors]);
+            continue;
+          }
+          // try color1 = mixedColors[0]
+          if (color1 === mixedColors[0] && color2 === mixedColors[1]) {
+            // we have a mixed mosaic
+            mosaics.push([pixel, ...coloredNeighbors]);
+            continue;
+          }
+          // try color1 = mixedColors[1]
+          if (color1 === mixedColors[1] && color2 === mixedColors[0]) {
+            // we have a mixed mosaic
+            mosaics.push([pixel, ...coloredNeighbors]);
+            continue;
+          }
+        } else {
+          // otherwise we have two of the same color
+          mosaics.push([pixel, ...sameColor]);
+        }
       }
     }
     return mosaics;
@@ -201,7 +239,7 @@ class Board {
         } else if (otherPixels[1].color == Color.colored) {
           // 0 is a real color
           const otherColor = otherPixels[0].color;
-          let colors = [otherColor, otherColor];
+          let colors: Color[] = [otherColor, otherColor];
           if (this.getRemaining(otherColor, coloredCount) < 2) {
             // we have to resort to mixed mosaic
             colors = this.getOtherColors(otherColor);
@@ -254,6 +292,15 @@ class Board {
     return keyArray.join("");
   }
 
+  public getLines() {
+    let lines = 0;
+    for (let i = 2; i < this.pixels.length; i += 3) {
+      if (this.pixels[i].filter((p) => p.color !== Color.empty).length === 0) break; // since its bottom up, we can early exit if we have a empty row
+      lines++;
+    }
+    return lines;
+  }
+
   public getScore() {
     let score = 0;
     for (let i = 0; i < this.pixels.length; i++) {
@@ -264,6 +311,8 @@ class Board {
     }
     const mosaics = this.findMosaics();
     score += mosaics.length * 10;
+    const lines = this.getLines();
+    score += lines * 10;
     return score;
   }
 
@@ -351,6 +400,7 @@ enum NeighborType {
   same,
   different,
   differentColor,
+  colored,
 }
 
 interface PixelData {
@@ -396,7 +446,7 @@ class Pixel {
       if (!pixel || pixel.color === Color.empty) return null;
       if (type == NeighborType.all) {
         return pixel;
-      } else if (this.color == Color.colored) {
+      } else if (type == NeighborType.colored || this.color == Color.colored) {
         return pixel?.color !== Color.white ? pixel : null;
       } else if (type == NeighborType.same) {
         return pixel?.color == this.color || pixel.color == Color.colored ? pixel : null;
@@ -419,11 +469,6 @@ class Pixel {
     return count;
   };
 }
-
-const board = new Board();
-board.loadString("y");
-board.printBoard();
-console.log();
 
 interface Branch {
   score: number;
@@ -456,8 +501,13 @@ const getHighestScore = (board: Board, depth: number, history: PixelData[], tran
   return maxScore;
 };
 
+const board = new Board();
+board.loadString("");
+board.printBoard();
+console.log();
+
 const start = Date.now();
-const topScore = getHighestScore(board, 6, [], new Map());
+const topScore = getHighestScore(board, 8, [], new Map());
 const end = Date.now();
 console.log("Top", topScore.score);
 console.log("Time:", end - start);
