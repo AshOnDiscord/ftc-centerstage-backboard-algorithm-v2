@@ -8,8 +8,14 @@ public class Main {
     board.loadString("  gy");
     board.printBoard();
     System.out.println();
+    // ArrayList<PixelData> moves = board.getMoves().stream().map(e -> new PixelData(e.x, e.y, e.color))
+    //     .collect(Collectors.toCollection(ArrayList<PixelData>::new));
+
+    // moves.forEach((e) -> {
+    //   System.out.println(e);
+    // });
     long start = System.currentTimeMillis();
-    Branch topScore = getHighestScore.calc(board, 4, new ArrayList<>(), new HashMap<String, Branch>());
+    Branch topScore = getHighestScore.calc(board, 8, new ArrayList<>(), new HashMap<String, Branch>());
     long end = System.currentTimeMillis();
     System.out.println("Top: " + topScore.score);
     System.out.println("Time: " + (end - start));
@@ -17,6 +23,7 @@ public class Main {
     Board newBoard = board.copy();
     topScore.history.forEach((e) -> {
       newBoard.pixels.get(e.y).get(e.x).color = e.color;
+      // System.out.println(e);
     });
     ArrayList<Pixel[]> mosaics = newBoard.findMosaics();
     mosaics.forEach(mosaic -> {
@@ -35,7 +42,7 @@ public class Main {
     });
     ArrayList<PixelData> newColors = newBoard.coloredColor(mosaics);
     newColors.forEach((e) -> {
-      System.out.println("(" + e.y + ", " + e.x + ") = " + e.color);
+      System.out.println(e);
       newBoard.pixels.get(e.y).get(e.x).color = e.color;
     });
     newBoard.printBoard();
@@ -117,11 +124,20 @@ class Board {
   // }
 
   public void printBoard() {
+    ArrayList<PixelData> moves = this.getMoves().stream().map(e -> new PixelData(e.y, e.x, e.color))
+        .collect(Collectors.toCollection(ArrayList<PixelData>::new));
+
     for (int i = this.pixels.size() - 1; i >= 0; i--) {
       ArrayList<Pixel> row = this.pixels.get(i);
       StringBuilder line = new StringBuilder(row.size() % 2 == 0 ? " " : "");
       // row.forEach(pixel -> {
       for (Pixel pixel : row) {
+        if (moves.stream().filter(e -> e.x == pixel.x && e.y == pixel.y).collect(Collectors.toList()).size() > 0) {
+          line.append(ColorEscape.getColor(pixel.color));
+          line.append("X ");
+          line.append(ColorEscape.empty);
+          continue;
+        }
         if (pixel.color == Color.empty) {
           line.append("- ");
           continue;
@@ -299,9 +315,9 @@ class Board {
           // all colored
           checked.add(otherPixels[0]);
           checked.add(otherPixels[1]);
-          newColors.add(new PixelData(pixel.x, pixel.y, mostColor));
-          newColors.add(new PixelData(otherPixels[0].x, otherPixels[0].y, mostColor));
-          newColors.add(new PixelData(otherPixels[1].x, otherPixels[1].y, mostColor));
+          newColors.add(new PixelData(pixel.y, pixel.x, mostColor));
+          newColors.add(new PixelData(otherPixels[0].y, otherPixels[0].x, mostColor));
+          newColors.add(new PixelData(otherPixels[1].y, otherPixels[1].x, mostColor));
         } else if (otherPixels[0].color == Color.colored) {
           // 1 is a real color
           Color otherColor = otherPixels[1].color;
@@ -317,8 +333,8 @@ class Board {
           }
           checked.add(otherPixels[0]);
           checked.add(otherPixels[1]);
-          newColors.add(new PixelData(pixel.x, pixel.y, colors[0]));
-          newColors.add(new PixelData(otherPixels[0].x, otherPixels[0].y, colors[1]));
+          newColors.add(new PixelData(pixel.y, pixel.x, colors[0]));
+          newColors.add(new PixelData(otherPixels[0].y, otherPixels[0].x, colors[1]));
         } else if (otherPixels[1].color == Color.colored) {
           // 0 is a real color
           Color otherColor = otherPixels[0].color;
@@ -334,26 +350,26 @@ class Board {
           }
           checked.add(otherPixels[0]);
           checked.add(otherPixels[1]);
-          newColors.add(new PixelData(pixel.x, pixel.y, colors[0]));
-          newColors.add(new PixelData(otherPixels[1].x, otherPixels[1].y, colors[1]));
+          newColors.add(new PixelData(pixel.y, pixel.x, colors[0]));
+          newColors.add(new PixelData(otherPixels[1].y, otherPixels[1].x, colors[1]));
         } else {
           // both are real colors
           Color c1 = otherPixels[0].color;
           Color c0 = otherPixels[1].color;
           if (c0 == c1) {
-            newColors.add(new PixelData(pixel.x, pixel.y, c0));
+            newColors.add(new PixelData(pixel.y, pixel.x, c0));
           } else {
             // if (![c0, c1].includes(Color.yellow)) {
             if (c0 != Color.yellow && c1 != Color.yellow) {
               // green and purple
-              newColors.add(new PixelData(pixel.x, pixel.y, Color.yellow));
+              newColors.add(new PixelData(pixel.y, pixel.x, Color.yellow));
               // } else if (![c0, c1].includes(Color.green)) {
             } else if (c0 != Color.green && c1 != Color.green) {
               // yellow and purple
-              newColors.add(new PixelData(pixel.x, pixel.y, Color.green));
+              newColors.add(new PixelData(pixel.y, pixel.x, Color.green));
             } else {
               // yellow and green
-              newColors.add(new PixelData(pixel.x, pixel.y, Color.purple));
+              newColors.add(new PixelData(pixel.y, pixel.x, Color.purple));
             }
           }
         }
@@ -418,55 +434,56 @@ class Board {
     return copy;
   }
 
-  public ArrayList<PixelData> getMoves() {
-    // go from top to bottom for each column
-    ArrayList<PixelData> moves = new ArrayList<>();
-    // }
+  public List<Pixel> getMoves() {
+    List<Pixel> moves = new ArrayList<>();
+
     for (int i = this.pixels.size() - 1; i >= 0; i--) {
       for (int j = 0; j < this.pixels.get(i).size(); j++) {
         Pixel pixel = this.pixels.get(i).get(j);
-        // if (pixel.color == Color.empty) continue;
-        if (pixel.color != Color.empty)
+
+        if (pixel.color != Color.empty) {
           continue; // skip if not empty
-        {
-          // check if pixels covering it
-          Pixel tL = pixel.getNeighbor(Direction.topLeft);
-          if (tL != null && tL.color != Color.empty) {
-            // System.out.println("tL", { x: tL.x, y: tL.y, color: Color[tL.color] }, { x:
-            // pixel.x, y: pixel.y, color: Color[pixel.color] });
-            continue;
-          }
-          Pixel tR = pixel.getNeighbor(Direction.topRight);
-          if (tR != null && tR.color != Color.empty) {
-            // System.out.println("tR", { x: tR.x, y: tR.y, color: Color[tR.color] }, { x:
-            // pixel.x, y: pixel.y, color: Color[pixel.color] });
-            continue;
-          }
         }
-        {
-          // check if the pixel has proper supports
-          Pixel bL = pixel.getNeighbor(Direction.bottomLeft);
-          Pixel bR = pixel.getNeighbor(Direction.bottomRight);
-          if (bL != null && bL.color == Color.empty) {
-            // missing left support
-            continue;
-          }
-          if (bR != null && bR.color == Color.empty) {
-            // missing right support
-            continue;
-          }
-          if (bL == null && bR != null && bR.color == Color.empty) {
-            // against left wall, missing right pixel
-            continue;
-          }
-          if (bR == null && bL != null && bL.color == Color.empty) {
-            // against right wall, missing left pixel
-            continue;
-          }
+
+        // check if pixels covering it
+        Pixel tL = pixel.getNeighbor(Direction.topLeft);
+        if (tL != null && tL.color != Color.empty) {
+          continue;
         }
+
+        Pixel tR = pixel.getNeighbor(Direction.topRight);
+        if (tR != null && tR.color != Color.empty) {
+          continue;
+        }
+
+        // check if the pixel has proper supports
+        Pixel bL = pixel.getNeighbor(Direction.bottomLeft);
+        Pixel bR = pixel.getNeighbor(Direction.bottomRight);
+
+        if (bL != null && bL.color == Color.empty) {
+          // missing left support
+          continue;
+        }
+
+        if (bR != null && bR.color == Color.empty) {
+          // missing right support
+          continue;
+        }
+
+        if (bL == null && bR != null && bR.color == Color.empty) {
+          // against left wall, missing right pixel
+          continue;
+        }
+
+        if (bR == null && bL != null && bL.color == Color.empty) {
+          // against right wall, missing left pixel
+          continue;
+        }
+
         moves.add(pixel);
       }
     }
+
     return moves;
   }
 }
@@ -529,8 +546,10 @@ class Pixel extends PixelData {
       } catch (IndexOutOfBoundsException e) {
         continue;
       }
-      if (pixel == null || pixel.color == Color.empty)
+      if (pixel == null || pixel.color == Color.empty) {
         neighbors[i] = null;
+        continue;
+      }
       if (type == NeighborType.all) {
         neighbors[i] = pixel;
       } else if (type == NeighborType.colored || this.color == Color.colored) {
@@ -672,22 +691,22 @@ class getHighestScore {
       Map<String, Branch> transpositionTable) {
     String boardKey = board.hash();
 
-    // if (transpositionTable.containsKey(boardKey)) {
-    //   System.out.println(boardKey);
-    //   return transpositionTable.get(boardKey);
-    // }
+    if (transpositionTable.containsKey(boardKey)) {
+      // System.out.println(boardKey);
+      return transpositionTable.get(boardKey);
+    }
 
     if (depth == 0) {
       return new Branch(board.getScore(), history);
     }
-    ArrayList<PixelData> moves = board.getMoves().stream().map(e -> new PixelData(e.x, e.y))
+    ArrayList<PixelData> moves = board.getMoves().stream().map(e -> new PixelData(e.y, e.x))
         .collect(Collectors.toCollection(ArrayList<PixelData>::new));
     Branch maxScore = new Branch(Integer.MIN_VALUE, null);
     for (PixelData move : moves) {
       for (Color color : new Color[] { Color.white, Color.colored }) {
         board.pixels.get(move.y).get(move.x).color = color;
         ArrayList<PixelData> historyClone = new ArrayList<>(history);
-        historyClone.add(new PixelData(move.x, move.y, color));
+        historyClone.add(new PixelData(move.y, move.x, color));
         Branch score = calc(board, depth - 1, historyClone, transpositionTable);
         board.pixels.get(move.y).get(move.x).color = Color.empty;
         // System.out.println(score.score + ": " + score.history.toString());
