@@ -226,7 +226,7 @@ class Board {
           if (this.getRemaining(otherColor, coloredCount) < 2) {
             // we have to resort to mixed mosaic
             colors = this.getOtherColors(otherColor);
-            if (this.getRemaining(colors[0], coloredCount) < 1 || this.getRemaining(colors[0], coloredCount)) {
+            if (this.getRemaining(colors[0], coloredCount) < 1 || this.getRemaining(colors[1], coloredCount) < 1) {
               // we don't have enough for a mixed mosaic,
               // abort to whites
               colors = [Color.white, Color.white];

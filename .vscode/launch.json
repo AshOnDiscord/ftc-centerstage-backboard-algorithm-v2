@@ -5,6 +5,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "type": "java",
+      "name": "Main",
+      "request": "launch",
+      "mainClass": "Main",
+      "projectName": "bun2_ece07202"
+    },
+    {
       "type": "bun",
       "internalConsoleOptions": "neverOpen",
       "request": "launch",
