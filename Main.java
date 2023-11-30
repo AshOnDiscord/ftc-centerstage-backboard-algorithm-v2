@@ -1,8 +1,16 @@
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class Main {
   public static void main(String[] args) {
+    // wait 1s
+//    try {
+//      TimeUnit.SECONDS.sleep(3);
+//    } catch (InterruptedException e) {
+//      // TODO Auto-generated catch block
+//      e.printStackTrace();
+//    }
 
     Board board = new Board();
     board.loadString("  gy");
@@ -15,7 +23,7 @@ public class Main {
     //   System.out.println(e);
     // });
     long start = System.currentTimeMillis();
-    Branch topScore = getHighestScore.calc(board, 8, new ArrayList<>(), new HashMap<String, Branch>());
+    Branch topScore = getHighestScore.calc(board, 8, new ArrayList<>(), new HashMap<>());
     long end = System.currentTimeMillis();
     System.out.println("Top: " + topScore.score);
     System.out.println("Time: " + (end - start));
@@ -69,7 +77,7 @@ class Board {
   public void loadString(String str) {
     int row = 0;
     int col = 0;
-    outerLoop: for (int i = 0; i < str.length(); i++) {
+    for (int i = 0; i < str.length(); i++) {
       switch (str.charAt(i)) {
         case 'w':
           this.pixels.get(row).get(col).color = Color.white;
@@ -89,7 +97,7 @@ class Board {
         case '/':
           row++;
           col = 0;
-          continue outerLoop;
+          continue;
       }
       col++;
       if (col >= this.pixels.get(row).size()) {
@@ -132,7 +140,7 @@ class Board {
       StringBuilder line = new StringBuilder(row.size() % 2 == 0 ? " " : "");
       // row.forEach(pixel -> {
       for (Pixel pixel : row) {
-        if (moves.stream().filter(e -> e.x == pixel.x && e.y == pixel.y).collect(Collectors.toList()).size() > 0) {
+        if (moves.stream().anyMatch(e -> e.x == pixel.x && e.y == pixel.y)) {
           line.append(ColorEscape.getColor(pixel.color));
           line.append("X ");
           line.append(ColorEscape.empty);
@@ -160,93 +168,90 @@ class Board {
   public ArrayList<Pixel[]> findMosaics() {
     ArrayList<Pixel> checked = new ArrayList<>();
     ArrayList<Pixel[]> mosaics = new ArrayList<>();
-    for (int y = 0; y < this.pixels.size(); y++) {
-      for (int x = 0; x < this.pixels.get(y).size(); x++) {
-        Pixel pixel = this.pixels.get(y).get(x);
-        if (pixel.color == Color.empty || pixel.color == Color.white || checked.contains(pixel))
-          continue;
-        checked.add(pixel);
-        ArrayList<Pixel> coloredNeighbors = Arrays.stream(pixel.getNeighbors(NeighborType.colored))
-            .filter(e -> e != null).collect(Collectors.toCollection(ArrayList::new));
-        coloredNeighbors.forEach((e) -> checked.add(e));
-        if (coloredNeighbors.size() != 2) {
-          // we have too little or too many colored neighbors, skip
-          // by extension, the neighbors are also invalid so we can skip them
-          // coloredNeighbors.forEach((e) => checked.add(e));
-          continue;
-        }
-        // check our neighbors, do they also have only two colored neighbors?
-        ArrayList<Pixel> n1 = Arrays.stream(coloredNeighbors.get(0).getNeighbors(NeighborType.colored))
-            .filter(e -> e != null).collect(Collectors.toCollection(ArrayList::new));
-        ArrayList<Pixel> n2 = Arrays.stream(coloredNeighbors.get(1).getNeighbors(NeighborType.colored))
-            .filter(e -> e != null).collect(Collectors.toCollection(ArrayList::new));
-        if (n1.size() != 2 || n2.size() != 2) {
-          // we have too little or too many colored neighbors, skip
-          // by extension, the neighbors are also invalid so we can skip them
-          // coloredNeighbors.forEach((e) => checked.add(e));
-          n1.forEach(e -> checked.add(e));
-          n2.forEach(e -> checked.add(e));
-          continue;
-        }
+      for (ArrayList<Pixel> pixelArrayList : this.pixels) {
+          for (Pixel pixel : pixelArrayList) {
+              if (pixel.color == Color.empty || pixel.color == Color.white || checked.contains(pixel))
+                  continue;
+              checked.add(pixel);
+              ArrayList<Pixel> coloredNeighbors = Arrays.stream(pixel.getNeighbors(NeighborType.colored))
+                      .filter(Objects::nonNull).collect(Collectors.toCollection(ArrayList::new));
+            checked.addAll(coloredNeighbors);
+              if (coloredNeighbors.size() != 2) {
+                  // we have too little or too many colored neighbors, skip
+                  // by extension, the neighbors are also invalid, so we can skip them
+                  continue;
+              }
+              // check our neighbors, do they also have only two colored neighbors?
+              ArrayList<Pixel> n1 = Arrays.stream(coloredNeighbors.get(0).getNeighbors(NeighborType.colored))
+                      .filter(Objects::nonNull).collect(Collectors.toCollection(ArrayList::new));
+              ArrayList<Pixel> n2 = Arrays.stream(coloredNeighbors.get(1).getNeighbors(NeighborType.colored))
+                      .filter(Objects::nonNull).collect(Collectors.toCollection(ArrayList::new));
+              if (n1.size() != 2 || n2.size() != 2) {
+                  // we have too little or too many colored neighbors, skip
+                  // by extension, the neighbors are also invalid, so we can skip them
+                  // coloredNeighbors.forEach((e) => checked.add(e));
+                checked.addAll(n1);
+                checked.addAll(n2);
+                  continue;
+              }
 
-        // make sure the neighbors are the same(so n1 is current and neighbor2, n2 is
-        // current and neighbor1)
-        if (!n1.contains(coloredNeighbors.get(1)) || !n2.contains(coloredNeighbors.get(0))) {
-          // they are not the same
-          // coloredNeighbors.forEach((e) => checked.add(e));
-          n1.forEach(e -> checked.add(e));
-          n2.forEach(e -> checked.add(e));
-          continue;
-        }
+              // make sure the neighbors are the same(so n1 is current and neighbor2, n2 is
+              // current and neighbor1)
+              if (!n1.contains(coloredNeighbors.get(1)) || !n2.contains(coloredNeighbors.get(0))) {
+                  // they are not the same
+                  // coloredNeighbors.forEach((e) => checked.add(e));
+                checked.addAll(n1);
+                checked.addAll(n2);
+                  continue;
+              }
 
-        // we have two colored neighbors, just have to make sure its valid configuration
-        // first we check for all same color
-        ArrayList<Pixel> sameColor = coloredNeighbors.stream()
-            .filter(e -> e.color == pixel.color || e.color == Color.colored)
-            .collect(Collectors.toCollection(ArrayList::new));
-        if (sameColor.size() != 2) {
-          // if we don't have two of the same we have to check for multi/mixed mosaic
-          Color color1 = coloredNeighbors.get(0).color;
-          Color color2 = coloredNeighbors.get(1).color;
-          Color[] mixedColors = this.getOtherColors(pixel.color);
-          // if we are colored, then if one our neighbors is colored, then we have a same
-          // or mixed mosaic(to be determined later)
-          if (pixel.color == Color.colored && (color1 == Color.colored || color2 == Color.colored)) {
-            // mosaics.add([pixel, ...coloredNeighbors]);
-            mosaics.add(new Pixel[] { pixel, coloredNeighbors.get(0), coloredNeighbors.get(1) });
-            continue;
-          }
+              // we have two colored neighbors, just have to make sure its valid configuration
+              // first we check for all same color
+              ArrayList<Pixel> sameColor = coloredNeighbors.stream()
+                      .filter(e -> e.color == pixel.color || e.color == Color.colored)
+                      .collect(Collectors.toCollection(ArrayList::new));
+              if (sameColor.size() != 2) {
+                  // if we don't have two of the same we have to check for multi/mixed mosaic
+                  Color color1 = coloredNeighbors.get(0).color;
+                  Color color2 = coloredNeighbors.get(1).color;
+                  Color[] mixedColors = this.getOtherColors(pixel.color);
+                  // if we are colored, then if one our neighbors is colored, then we have a same
+                  // or mixed mosaic(to be determined later)
+                  if (pixel.color == Color.colored && (color1 == Color.colored || color2 == Color.colored)) {
+                      // mosaics.add([pixel, ...coloredNeighbors]);
+                      mosaics.add(new Pixel[]{pixel, coloredNeighbors.get(0), coloredNeighbors.get(1)});
+                      continue;
+                  }
 
-          // try color1 = colored
-          if (color1 == Color.colored && Arrays.asList(mixedColors).contains(color2)) {
-            // we have a mixed mosaic
-            mosaics.add(new Pixel[] { pixel, coloredNeighbors.get(0), coloredNeighbors.get(1) });
-            continue;
+                  // try color1 = colored
+                  if (color1 == Color.colored && Arrays.asList(mixedColors).contains(color2)) {
+                      // we have a mixed mosaic
+                      mosaics.add(new Pixel[]{pixel, coloredNeighbors.get(0), coloredNeighbors.get(1)});
+                      continue;
+                  }
+                  // try color2 = colored
+                  if (color2 == Color.colored && Arrays.asList(mixedColors).contains(color1)) {
+                      // we have a mixed mosaic
+                      mosaics.add(new Pixel[]{pixel, coloredNeighbors.get(0), coloredNeighbors.get(1)});
+                      continue;
+                  }
+                  // try color1 = mixedColors[0]
+                  if (color1 == mixedColors[0] && color2 == mixedColors[1]) {
+                      // we have a mixed mosaic
+                      mosaics.add(new Pixel[]{pixel, coloredNeighbors.get(0), coloredNeighbors.get(1)});
+                      continue;
+                  }
+                  // try color1 = mixedColors[1]
+                  if (color1 == mixedColors[1] && color2 == mixedColors[0]) {
+                      // we have a mixed mosaic
+                      mosaics.add(new Pixel[]{pixel, coloredNeighbors.get(0), coloredNeighbors.get(1)});
+                  }
+              } else {
+                  // otherwise we have two of the same color
+                  mosaics.add(new Pixel[]{pixel, sameColor.get(0), sameColor.get(1)});
+              }
           }
-          // try color2 = colored
-          if (color2 == Color.colored && Arrays.asList(mixedColors).contains(color1)) {
-            // we have a mixed mosaic
-            mosaics.add(new Pixel[] { pixel, coloredNeighbors.get(0), coloredNeighbors.get(1) });
-            continue;
-          }
-          // try color1 = mixedColors[0]
-          if (color1 == mixedColors[0] && color2 == mixedColors[1]) {
-            // we have a mixed mosaic
-            mosaics.add(new Pixel[] { pixel, coloredNeighbors.get(0), coloredNeighbors.get(1) });
-            continue;
-          }
-          // try color1 = mixedColors[1]
-          if (color1 == mixedColors[1] && color2 == mixedColors[0]) {
-            // we have a mixed mosaic
-            mosaics.add(new Pixel[] { pixel, coloredNeighbors.get(0), coloredNeighbors.get(1) });
-            continue;
-          }
-        } else {
-          // otherwise we have two of the same color
-          mosaics.add(new Pixel[] { pixel, sameColor.get(0), sameColor.get(1) });
-        }
       }
-    }
     return mosaics;
   }
 
@@ -305,7 +310,7 @@ class Board {
         Color mostColor = Color.white;
         int mostCount = 0;
         for (int i = Color.yellow.val; i <= Color.green.val; i++) {
-          if (this.getRemaining(Color.fromInt(i), coloredCount) > mostCount) {
+            if (this.getRemaining(Color.fromInt(i), coloredCount) > mostCount) {
             mostColor = Color.fromInt(i);
             mostCount = this.limits[i];
           }
@@ -378,29 +383,24 @@ class Board {
     return newColors;
   }
 
-  public String hash() {
-    // Preallocate the key for better performance
-    // int[] keyArray = new int[this.pixels.size() * this.pixels.get(0).size()];
-    StringBuilder keyArray = new StringBuilder();
+  public int hash() {
+    int hash = 1;
 
-    for (int i = 0; i < this.pixels.size(); i++) {
-      for (int j = 0; j < this.pixels.get(i).size(); j++) {
-        // keyArray[index] = this.pixels.get(i).get(j).color.val;
-        ArrayList<Pixel> row = this.pixels.get(i);
-        Pixel pixel = row.get(j);
-        // keyArray[index] = pixel.color.val;
-        keyArray.append(String.valueOf(pixel.color.val));
+    for (ArrayList<Pixel> row : this.pixels) {
+      for (Pixel pixel : row) {
+        // Incorporate pixel.color.val into the hash
+        hash = 31 * hash + pixel.color.val;
       }
     }
 
-    return keyArray.toString();
+    return hash;
   }
 
   public int getLines() {
     int lines = 0;
     for (int i = 2; i < this.pixels.size(); i += 3) {
-      if (this.pixels.get(i).stream().filter(p -> p.color != Color.empty).collect(Collectors.toList()).size() == 0)
-        break; // since its bottom up, we can early exit if we have a empty row
+      if (this.pixels.get(i).stream().noneMatch(p -> p.color != Color.empty))
+        break; // since its bottom up, we can early exit if we have an empty row
       lines++;
     }
     return lines;
@@ -408,13 +408,12 @@ class Board {
 
   public int getScore() {
     int score = 0;
-    for (int i = 0; i < this.pixels.size(); i++) {
-      for (int j = 0; j < this.pixels.get(i).size(); j++) {
-        Pixel p = this.pixels.get(i).get(j);
-        if (p.color != Color.empty)
-          score += 3;
+      for (ArrayList<Pixel> row : this.pixels) {
+          for (Pixel pixel : row) {
+              if (pixel.color != Color.empty)
+                  score += 3;
+          }
       }
-    }
     ArrayList<Pixel[]> mosaics = this.findMosaics();
     score += mosaics.size() * 10;
     int lines = this.getLines();
@@ -470,17 +469,7 @@ class Board {
           continue;
         }
 
-        if (bL == null && bR != null && bR.color == Color.empty) {
-          // against left wall, missing right pixel
-          continue;
-        }
-
-        if (bR == null && bL != null && bL.color == Color.empty) {
-          // against right wall, missing left pixel
-          continue;
-        }
-
-        moves.add(pixel);
+          moves.add(pixel);
       }
     }
 
@@ -540,12 +529,13 @@ class Pixel extends PixelData {
     Pixel[] neighbors = new Pixel[offsets.length];
     for (int i = 0; i < offsets.length; i++) {
       int[] offset = offsets[i];
-      Pixel pixel;
-      try {
-        pixel = this.board.pixels.get(this.y + offset[0]).get(this.x + offset[1]);
-      } catch (IndexOutOfBoundsException e) {
+      int newX = this.x + offset[1];
+      int newY = this.y + offset[0];
+
+      if (newY < 0 || newY >= this.board.pixels.size() || newX < 0 || newX >= this.board.pixels.get(newY).size()) {
         continue;
       }
+      Pixel pixel = this.board.pixels.get(newY).get(newX);
       if (pixel == null || pixel.color == Color.empty) {
         neighbors[i] = null;
         continue;
@@ -573,7 +563,7 @@ class Pixel extends PixelData {
       count[i] = Arrays.stream(colors).filter(e -> e != null && e.color == color).toArray(Pixel[]::new).length;
     }
     return count;
-  };
+  }
 }
 
 enum Color {
@@ -588,7 +578,7 @@ enum Color {
     this.val = val;
   }
 
-  public int val;
+  public final int val;
 
   public static Color fromInt(int val) {
     for (Color c : Color.values()) {
@@ -612,7 +602,7 @@ enum Direction {
     this.val = val;
   }
 
-  public int val;
+  public final int val;
 
   public static Direction fromInt(int val) {
     for (Direction d : Direction.values()) {
@@ -671,7 +661,6 @@ class ColorEscape {
       case purple -> ColorEscape.purple;
       case green -> ColorEscape.green;
       case colored -> ColorEscape.colored;
-      default -> ColorEscape.empty;
     };
   }
 }
@@ -688,8 +677,8 @@ class Branch {
 
 class getHighestScore {
   public static Branch calc(Board board, int depth, ArrayList<PixelData> history,
-      Map<String, Branch> transpositionTable) {
-    String boardKey = board.hash();
+      Map<Integer, Branch> transpositionTable) {
+    Integer boardKey = board.hash();
 
     if (transpositionTable.containsKey(boardKey)) {
       // System.out.println(boardKey);
@@ -717,5 +706,5 @@ class getHighestScore {
     }
     transpositionTable.put(boardKey, maxScore);
     return maxScore;
-  };
+  }
 }
